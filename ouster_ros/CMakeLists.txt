@@ -88,6 +88,13 @@ target_link_libraries(img_node ouster_ros ${catkin_LIBRARIES} ouster_viz
 target_include_directories(img_node PRIVATE include ${catkin_INCLUDE_DIRS})
 add_dependencies(img_node ${PROJECT_NAME}_gencpp)
 
+add_executable(cluster_node src/PointCloudHandle.cpp)
+target_link_libraries(cluster_node ouster_ros ${catkin_LIBRARIES} ouster_viz
+        ouster_client ${VTK_LIBRARIES})
+target_include_directories(cluster_node PRIVATE include
+        ${catkin_INCLUDE_DIRS})
+add_dependencies(cluster_node ${PROJECT_NAME}_gencpp)
+
 # ==== Install ====
 install(
   TARGETS os_node os_cloud_node viz_node img_node

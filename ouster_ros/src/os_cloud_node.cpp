@@ -44,9 +44,7 @@ int main(int argc, char** argv) {
 
     auto info = sensor::parse_metadata(cfg.response.metadata);
     uint32_t H = info.format.pixels_per_column;
-    std::cout<<"H is:"<<H<<std::endl;
     uint32_t W = info.format.columns_per_frame;
-    std::cout<<"W is:"<<W<<std::endl;
 
     auto pf = sensor::get_format(info.format);
 
