@@ -32,6 +32,8 @@ add_compile_options(-Wall -Wextra -Werror)
 
 # ==== Catkin ====
 add_message_files(FILES PacketMsg.msg)
+add_message_files(FILES LidarInfo.msg)
+add_message_files(FILES LidarInfoArray.msg)
 add_service_files(FILES OSConfigSrv.srv)
 generate_messages(DEPENDENCIES std_msgs sensor_msgs geometry_msgs)
 

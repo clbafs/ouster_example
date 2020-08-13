@@ -50,13 +50,17 @@
 #include "ouster/types.h"
 #include "ouster_ros/OSConfigSrv.h"
 #include "ouster_ros/ros.h"
+#include "ouster_ros/LidarInfo.h"
+#include "ouster_ros/LidarInfoArray.h"
 
 namespace sensor = ouster::sensor;
 namespace viz = ouster::viz;
+ros::Publisher cluster_pub;
+using namespace std;
+using namespace pcl;
 
 struct TClusterInfo {
     int id = 0;
-    //int type = dronemsg::CLUSTER_UNKNOWN;
     float l_edge = -1;
     float r_edge = -1;
     float c_edge = -1;
@@ -65,16 +69,9 @@ struct TClusterInfo {
     float c_distance = -1;
     float min_distance = -1;
     int points_num = -1;
-    bool visible_to_cam = false;
-    pcl::PointXYZ center{};//cluster center x in PCL frame EDN
-    pcl::PointXYZ normal{};
-    pcl::PointXYZ min_z_pt{};
-    pcl::PointXYZ leading_pt_local{};
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cluster{};
-    //pcl::PointCloud<pcl::PointXYZ>::Ptr cluster_in_local{};
 };
 
-void DownSampling( pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud_input, pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud_output,
+void DownSampling(pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud_input, pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud_output,
                   float lx, float ly, float lz) {
     pcl::VoxelGrid<pcl::PointXYZ> voxels;
     voxels.setInputCloud(cloud_input);
@@ -82,16 +79,16 @@ void DownSampling( pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud_input, pcl::PointC
     voxels.filter(*cloud_output);
 }
 
-void ConditionalRemoval(const pcl::PointCloud<pcl::PointXYZ>::Ptr &input_cloud,
-                                             const pcl::PointCloud<pcl::PointXYZ>::Ptr &output_cloud,
-                                             float min, float max) {
+void conditionalRemoval(const pcl::PointCloud<pcl::PointXYZ>::Ptr &input_cloud,
+                        const pcl::PointCloud<pcl::PointXYZ>::Ptr &output_cloud,
+                        float min, float max) {
     pcl::ConditionAnd<pcl::PointXYZ>::Ptr range_cond(new pcl::ConditionAnd<pcl::PointXYZ>());
     range_cond->addComparison(pcl::FieldComparison<pcl::PointXYZ>::ConstPtr
                                       (new pcl::FieldComparison<pcl::PointXYZ>("z", pcl::ComparisonOps::GE,
-                                                                     min)));
+                                                                               min)));
     range_cond->addComparison(pcl::FieldComparison<pcl::PointXYZ>::ConstPtr
                                       (new pcl::FieldComparison<pcl::PointXYZ>("z", pcl::ComparisonOps::LE,
-                                                                     max)));
+                                                                               max)));
     // 创建滤波器并用条件定义对象初始化
     pcl::ConditionalRemoval<pcl::PointXYZ> condRem;//创建条件滤波器
     condRem.setCondition(range_cond); //并用条件定义对象初始化
@@ -104,27 +101,29 @@ void ConditionalRemoval(const pcl::PointCloud<pcl::PointXYZ>::Ptr &input_cloud,
 void CloudConvert(ouster_ros::Cloud &cloud_input, pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud_out) {
     pcl::copyPointCloud(cloud_input, *cloud_out);
 }
-void CloudFilterDependOnCloudQuality(ouster_ros::Cloud &cloud_input,ouster_ros::Cloud &cloud_output){
+
+void CloudFilterDependOnCloudQuality(ouster_ros::Cloud &cloud_input, ouster_ros::Cloud &cloud_output) {
     //ouster_ros::Cloud cloud_filter_;
-    for(auto pt:cloud_input){
+    for (auto pt:cloud_input) {
         // range measure in mm
         // code:xyz RDF
-        // ouster:xyz BRU
-        float original_x=pt.x;
-        float original_y=pt.y;
-        float original_z=pt.z;
-        if(pt.range>3000){
-            pt.x=original_y;
-            pt.y=-original_z;
-            pt.z=-original_x;
+        // ouster:xyz FLU
+        float original_x = pt.x;
+        float original_y = pt.y;
+        float original_z = pt.z;
+        if (pt.range > 1000) {
+            pt.x = original_y;
+            pt.y = -original_z;
+            pt.z = original_x;
             cloud_output.points.push_back(pt);
         }
         // todo filter by noise and intensity
     }
 }
+
 void EuclideanClusterKdTree(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-                                                 std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> &cloud_eu, float eps,
-                                                 int min_samples_size, std::vector<pcl::PointIndices> clusters_indices) {
+                            std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> &cloud_eu, float eps,
+                            int min_samples_size, std::vector<pcl::PointIndices> clusters_indices) {
     if (cloud->empty() || eps <= 0 || min_samples_size <= 0) {
         return;
     }
@@ -156,6 +155,7 @@ void EuclideanClusterKdTree(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
         cloud_eu.push_back(cloud_cluster);
     }
 }
+
 /*void GetOutput(const std::vector<pcl::PointIndices> &clusters_indices,
                                     std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> clusters,
                                     std::vector<TClusterInfo> &cluster_info) {
@@ -229,7 +229,7 @@ void EuclideanClusterKdTree(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
         if (int(clusters[i]->size()) < K) {
             K = clusters[i]->size();
         }
-        *//*info.l_distance = GetKAverageDistance(kdTree, min_xPt, K, clusters[i]);
+        info.l_distance = GetKAverageDistance(kdTree, min_xPt, K, clusters[i]);
         //info.l_distance = sqrt(min_xPt.x * min_xPt.x + min_xPt.z * min_xPt.z);
         //info.r_distance = sqrt(max_xPt.x * max_xPt.x + max_xPt.z * max_xPt.z);
         info.r_distance = GetKAverageDistance(kdTree, max_xPt, K, clusters[i]);
@@ -307,10 +307,51 @@ void EuclideanClusterKdTree(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
             cluster_info.push_back(info);
         }
         //PrintClusterInfo(info, i);
-    }*//*
+    }
     }
 }*/
 
+float GetKAverageDistance(const pcl::KdTreeFLANN<pcl::PointXYZ> &kdTree, pcl::PointXYZ pt, int K,
+                          const pcl::PointCloud<pcl::PointXYZ>::Ptr &cluster) {
+    std::vector<int> pointIdxNKNSearch(static_cast<unsigned long>(K));
+    std::vector<float> pointNKNSquaredDistance(static_cast<unsigned long>(K));
+    if (kdTree.nearestKSearch(pt, K, pointIdxNKNSearch, pointNKNSquaredDistance) > 0) {
+        float distance = 0;
+        float total_distance = 0;
+        for (int j : pointIdxNKNSearch) {
+            float x_pt = cluster->points[j].x;
+            float y_pt = cluster->points[j].y;
+            float z_pt = cluster->points[j].z;
+            total_distance += sqrt(x_pt * x_pt + y_pt * y_pt + z_pt * z_pt);
+        }
+        distance = total_distance / K;
+        return distance;
+    }
+    return 0;
+}
+
+pcl::PointXYZ GetKAveragePoint(const pcl::KdTreeFLANN<pcl::PointXYZ> &kdTree, pcl::PointXYZ pt, int K,
+                               const pcl::PointCloud<pcl::PointXYZ>::Ptr &cluster) {
+    std::vector<int> pointIdxNKNSearch(static_cast<unsigned long>(K));
+    vector<float> pointNKNSquaredDistance(static_cast<unsigned long>(K));
+    if (kdTree.nearestKSearch(pt, K, pointIdxNKNSearch, pointNKNSquaredDistance) > 0) {
+        float sum_x = 0, sum_y = 0, sum_z = 0;
+        PointXYZ average_point;
+        for (int j : pointIdxNKNSearch) {
+            float x_pt = cluster->points[j].x;
+            float y_pt = cluster->points[j].y;
+            float z_pt = cluster->points[j].z;
+            sum_x += x_pt;
+            sum_y += y_pt;
+            sum_z += z_pt;
+        }
+        average_point.x = sum_x / K;
+        average_point.y = sum_y / K;
+        average_point.z = sum_z / K;
+        return average_point;
+    }
+    return PointXYZ(0, 0, 0);
+}
 
 
 void cloud_handler(const sensor_msgs::PointCloud2::ConstPtr &m) {
@@ -322,28 +363,132 @@ void cloud_handler(const sensor_msgs::PointCloud2::ConstPtr &m) {
     std::vector<pcl::PointIndices> clusters_indices;
     std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> clusters;
     pcl::fromROSMsg(*m, cloud_);
-    CloudFilterDependOnCloudQuality(cloud_,cloud_filter_);
-    CloudConvert(cloud_filter_,cloud_xyz_ptr);
+
+    CloudFilterDependOnCloudQuality(cloud_, cloud_filter_);
+    cout << cloud_filter_.size() << endl;
+    CloudConvert(cloud_filter_, cloud_xyz_ptr);
     //std::cout<<"condition point num:"<<cloud_xyz_ptr->points.size()<<std::endl;
-    ConditionalRemoval(cloud_xyz_ptr, cloud_conditional_filtered, 3.0, 30.0);
+    conditionalRemoval(cloud_xyz_ptr, cloud_conditional_filtered, 0.5, 30.0);
     if (cloud_conditional_filtered->empty()) {
         return;
     }
     //std::cout<<"condition point num:"<<cloud_conditional_filtered->points.size()<<std::endl;
-    DownSampling(cloud_xyz_ptr,cloud_downsmaple_ptr,0.05,0.05,0.1);
+    //DownSampling(cloud_xyz_ptr,cloud_downsmaple_ptr,0.05,0.05,0.1);
     EuclideanClusterKdTree(cloud_conditional_filtered, clusters, 0.3, 6, clusters_indices);
-    std::cout<<"cluster size:"<<clusters.size()<<std::endl;
+
+
+    std::vector<TClusterInfo> cluster_info;
+    std::vector<int> NumPoints;
+    for (auto &cluster : clusters) {
+        NumPoints.push_back(cluster->points.size());
+    }
+    sort(NumPoints.begin(), NumPoints.end(), std::greater<int>());
+    pcl::PointXYZ minPt, maxPt, cenPt, min_xPt, max_xPt, min_zPt;
+
+    for (int i = 0; i < int(clusters.size()); i++) {
+        TClusterInfo info;
+        info.id = i;
+        pcl::ConditionOr<pcl::PointXYZ>::Ptr range_cond(new pcl::ConditionOr<pcl::PointXYZ>());
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZ>);
+        Eigen::Vector4f centroid;
+        compute3DCentroid(*clusters[i], centroid);
+        cenPt.x = centroid[0];
+        cenPt.y = centroid[1];
+        cenPt.z = centroid[2];
+        cout << "center pt.x:" << cenPt.x << endl;
+        cout << "center pt.z:" << cenPt.z << endl;
+        pcl::KdTreeFLANN<pcl::PointXYZ> kdTree;
+        kdTree.setInputCloud(clusters[i]);
+        if (clusters[i]->empty()) {
+            return;
+        }
+        int K = 10;
+        if (int(clusters[i]->size()) < K) {
+            K = clusters[i]->size();
+        }
+        info.points_num = static_cast<int>(clusters[i]->points.size());
+
+        info.c_distance = GetKAverageDistance(kdTree, cenPt, K, clusters[i]);
+
+        getMinMax3D(*clusters[i], minPt, maxPt);
+        //为条件定义对象添加比较算子
+        range_cond->addComparison(pcl::FieldComparison<pcl::PointXYZ>::ConstPtr
+                                          (new pcl::FieldComparison<pcl::PointXYZ>("x", ComparisonOps::LE,
+                                                                                   minPt.x)));
+        range_cond->addComparison(pcl::FieldComparison<pcl::PointXYZ>::ConstPtr
+                                          (new pcl::FieldComparison<pcl::PointXYZ>("x", ComparisonOps::GE,
+                                                                                   maxPt.x)));
+        // 创建滤波器并用条件定义对象初始化
+        pcl::ConditionalRemoval<pcl::PointXYZ> condRem;//创建条件滤波器
+        condRem.setCondition(range_cond); //并用条件定义对象初始化
+        condRem.setInputCloud(clusters[i]);     //输入点云
+        //condRem.setKeepOrganized(true);    //设置保持点云的结构
+        // 执行滤波
+        condRem.filter(*cloud_filtered);
+        // this cloud only has two points
+        if (cloud_filtered->points[0].x < cloud_filtered->points[1].x) {
+            min_xPt = cloud_filtered->points[0];
+            max_xPt = cloud_filtered->points[1];
+        } else {
+            min_xPt = cloud_filtered->points[1];
+            max_xPt = cloud_filtered->points[0];
+        }
+        info.l_distance = GetKAverageDistance(kdTree, min_xPt, K, clusters[i]);
+        info.r_distance = GetKAverageDistance(kdTree, max_xPt, K, clusters[i]);
+
+        pcl::PointXYZ min_average_point = GetKAveragePoint(kdTree, min_xPt, K, clusters[i]);
+        pcl::PointXYZ max_average_point = GetKAveragePoint(kdTree, max_xPt, K, clusters[i]);
+        info.l_edge = static_cast<float>(0.5 +
+                                         (2 * (180 / 3.14 * (atan(min_average_point.x / min_average_point.z))) / 180) *
+                                         0.5);
+        info.r_edge = static_cast<float>(0.5 +
+                                         (2 * (180 / 3.14 * (atan(max_average_point.x / max_average_point.z))) / 180) *
+                                         0.5);
+        info.c_edge = (info.r_edge + info.l_edge) / 2;
+
+        if (clusters.size() > 3) {
+            if (info.points_num >= NumPoints[2]) {
+                if (cluster_info.size() < 3) {
+                    cluster_info.push_back(info);
+                }
+            }
+        } else {
+            cluster_info.push_back(info);
+        }
+
+    }
+
+
+
+    ouster_ros::LidarInfoArray lidarinfo_array;
+    for (const auto &cluster: cluster_info) {
+        ouster_ros::LidarInfo lidar_info;
+        lidar_info.l_edge = cluster.l_edge;
+        lidar_info.r_edge = cluster.r_edge;
+        lidar_info.c_edge = cluster.c_edge;
+        lidar_info.points_num = cluster.points_num;
+        lidar_info.r_distance = cluster.r_distance;
+        lidar_info.c_distance = cluster.c_distance;
+        lidar_info.l_distance = cluster.l_distance;
+        lidar_info.header.stamp = ros::Time::now();//use this as unique id, sensor info keep the same timestamp
+        lidar_info.header.frame_id = "lidar_ouster";
+        //lidar_info.header.seq = seq;
+        lidarinfo_array.lidar_array.push_back(lidar_info);
+    }
+    cluster_pub.publish(lidarinfo_array);
+
+
 }
 
 int main(int argc, char **argv) {
     ros::init(argc, argv, "cluster_node");
     ros::Subscriber pc_sub;
+    ros::Subscriber pc_one_line_sub;
     ros::NodeHandle nh("~");
     pc_sub =
-            nh.subscribe<sensor_msgs::PointCloud2>("/os_cloud_node/points", 500, cloud_handler);
+            nh.subscribe<sensor_msgs::PointCloud2>("/os_cloud_node/one_line_points", 500, cloud_handler);
+    cluster_pub = nh.advertise<ouster_ros::LidarInfoArray>("/os_cloud_node/cluster", 10);
 
     ros::spin();
     return EXIT_SUCCESS;
 }
-
-

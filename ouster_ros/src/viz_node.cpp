@@ -65,7 +65,7 @@ int main(int argc, char** argv) {
         [&](std::chrono::nanoseconds) mutable { lidar_scan_viz.draw(ls); });
 
     auto lidar_handler = [&](const PacketMsg& pm) mutable {
-        batch_and_display(pm.buf.data(), it);
+        batch_and_display(pm.buf.data(), it,it);
     };
 
     auto lidar_packet_sub = nh.subscribe<PacketMsg, const PacketMsg&>(
