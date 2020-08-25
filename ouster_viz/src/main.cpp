@@ -214,7 +214,7 @@ int main(int argc, char** argv) {
             if (st & sensor::client_state::LIDAR_DATA) {
                 if (sensor::read_lidar_packet(*cli, lidar_buf.get(),
                                               packet_format))
-                    batch_and_display(lidar_buf.get(), write_it, write_it);
+                    batch_and_display(lidar_buf.get(), write_it);
             }
             if (st & sensor::client_state::IMU_DATA) {
                 sensor::read_imu_packet(*cli, imu_buf.get(), packet_format);

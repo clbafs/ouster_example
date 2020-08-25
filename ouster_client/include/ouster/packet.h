@@ -15,17 +15,17 @@
 #include "ouster/types.h"
 
 namespace ouster {
-    namespace sensor {
+namespace sensor {
 
-        constexpr packet_format packet__1_13_0 = impl::packet__1_14_0<64>();
+constexpr packet_format packet__1_13_0 = impl::packet__1_14_0<64>();
 
-        constexpr packet_format packet__1_14_0__16 = impl::packet__1_14_0<16>();
+constexpr packet_format packet__1_14_0__16 = impl::packet__1_14_0<16>();
 
-        constexpr packet_format packet__1_14_0__32 = impl::packet__1_14_0<32>();
+constexpr packet_format packet__1_14_0__32 = impl::packet__1_14_0<32>();
 
-        constexpr packet_format packet__1_14_0__64 = impl::packet__1_14_0<64>();
+constexpr packet_format packet__1_14_0__64 = impl::packet__1_14_0<64>();
 
-        constexpr packet_format packet__1_14_0__128 = impl::packet__1_14_0<128>();
+constexpr packet_format packet__1_14_0__128 = impl::packet__1_14_0<128>();
 
 
 /**
@@ -57,72 +57,64 @@ namespace ouster {
  * @return a function taking a lidar packet buffer and random-access iterator to
  * which data is added for every point in the scan.
  */
-        template<typename iterator_type, typename F, typename C>
-        std::function<void(const uint8_t *, iterator_type it, iterator_type it_one_line)> batch_to_iter(
-                int w, const packet_format &pf,
-                const typename std::iterator_traits<iterator_type>::value_type &empty,
-                C &&c, F &&f, std::function<void(std::chrono::nanoseconds scan_ts)> &&g = nullptr) {
+template <typename iterator_type, typename F, typename C>
+std::function<void(const uint8_t*, iterator_type it)> batch_to_iter(
+    int w, const packet_format& pf,
+    const typename std::iterator_traits<iterator_type>::value_type& empty,
+    C&& c, F&& f) {
+    int h = pf.pixels_per_column;
+    int next_m_id{w};
+    int32_t cur_f_id{-1};
 
-            int h = pf.pixels_per_column;
-            int next_m_id{w};
-            int32_t cur_f_id{-1};
+    constexpr std::chrono::nanoseconds invalid_ts(-1LL);
+    std::chrono::nanoseconds scan_ts(invalid_ts);
 
-            constexpr std::chrono::nanoseconds invalid_ts(-1LL);
-            std::chrono::nanoseconds scan_ts(invalid_ts);
+    return [=](const uint8_t* packet_buf, iterator_type it) mutable {
+        for (int icol = 0; icol < pf.columns_per_packet; icol++) {
+            const uint8_t* col_buf = pf.nth_col(icol, packet_buf);
+            const uint16_t m_id = pf.col_measurement_id(col_buf);
+            const uint16_t f_id = pf.col_frame_id(col_buf);
+            const std::chrono::nanoseconds ts(pf.col_timestamp(col_buf));
+            const bool valid = pf.col_valid(col_buf) == 0xffffffff;
 
-            return [=](const uint8_t *packet_buf, iterator_type it, iterator_type it_one_line = NULL) mutable {
-                for (int icol = 0; icol < pf.columns_per_packet; icol++) {
-                    const uint8_t *col_buf = pf.nth_col(icol, packet_buf);
-                    const uint16_t m_id = pf.col_measurement_id(col_buf);
-                    const uint16_t f_id = pf.col_frame_id(col_buf);
-                    const std::chrono::nanoseconds ts(pf.col_timestamp(col_buf));
-                    const bool valid = pf.col_valid(col_buf) == 0xffffffff;
+            // drop invalid / out-of-bounds data in case of misconfiguration
+            if (!valid || m_id >= w || f_id + 1 == cur_f_id) continue;
 
-                    // drop invalid / out-of-bounds data in case of misconfiguration
-                    if (!valid || m_id >= w || f_id + 1 == cur_f_id) continue;
-
-                    if (f_id != cur_f_id) {
-                        // if not initializing with first packet
-                        if (scan_ts != invalid_ts) {
-                            // zero out remaining missing columns
-                            std::fill(it + (h * next_m_id), it + (w * h), empty);
-                            f(scan_ts);
-                            if (g != nullptr){
-                                for (int i = 0; i < w; i++) {
-                                    it_one_line[i] = it[7 + i * h];
-                                }
-                                g(scan_ts);
-                            }
-
-                        }
-
-                        // start new frame
-                        scan_ts = ts;
-                        next_m_id = 0;
-                        cur_f_id = f_id;
-                    }
-
-                    // zero out missing columns if we jumped forward
-                    if (m_id >= next_m_id) {
-                        std::fill(it + (h * next_m_id), it + (h * m_id), empty);
-                        next_m_id = m_id + 1;
-                    }
-
-                    // index of the first point in current packet
-                    const std::ptrdiff_t idx = h * m_id;
-
-                    for (uint8_t ipx = 0; ipx < h; ipx++) {
-                        const uint8_t *px_buf = pf.nth_px(ipx, col_buf);
-
-                        // i, ts, reflectivity, ring, noise, range (mm)
-                        it[idx + ipx] =
-                                c(ipx, m_id, ts, scan_ts, pf.px_range(px_buf),
-                                  pf.px_signal_photons(px_buf), pf.px_noise_photons(px_buf),
-                                  pf.px_reflectivity(px_buf));
-                    }
+            if (f_id != cur_f_id) {
+                // if not initializing with first packet
+                if (scan_ts != invalid_ts) {
+                    // zero out remaining missing columns
+                    std::fill(it + (h * next_m_id), it + (w * h), empty);
+                    f(scan_ts);
                 }
-            };
-        }
 
-    }  // namespace sensor
+                // start new frame
+                scan_ts = ts;
+                next_m_id = 0;
+                cur_f_id = f_id;
+            }
+
+            // zero out missing columns if we jumped forward
+            if (m_id >= next_m_id) {
+                std::fill(it + (h * next_m_id), it + (h * m_id), empty);
+                next_m_id = m_id + 1;
+            }
+
+            // index of the first point in current packet
+            const std::ptrdiff_t idx = h * m_id;
+
+            for (uint8_t ipx = 0; ipx < h; ipx++) {
+                const uint8_t* px_buf = pf.nth_px(ipx, col_buf);
+
+                // i, ts, reflectivity, ring, noise, range (mm)
+                it[idx + ipx] =
+                    c(ipx, m_id, ts, scan_ts, pf.px_range(px_buf),
+                      pf.px_signal_photons(px_buf), pf.px_noise_photons(px_buf),
+                      pf.px_reflectivity(px_buf));
+            }
+        }
+    };
+}
+
+}  // namespace sensor
 }  // namespace ouster
