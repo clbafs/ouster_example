@@ -18,7 +18,7 @@
 #include <vector>
 
 #include "ouster/compat.h"
-#include "ouster/impl/client_impl.h"
+#include "ouster/client_impl.h"
 #include "ouster/types.h"
 
 namespace ouster {
@@ -353,14 +353,13 @@ client_state poll_client(const client& c, const int timeout_sec) {
     int retval = select(max_fd + 1, &rfds, NULL, NULL, &tv);
 
     client_state res = client_state(0);
-    //std::cout<<"YYYY"<<__LINE__<<std::endl;
+
     if (!socket_valid(retval) && socket_exit()) {
         res = EXIT;
     } else if (!socket_valid(retval)) {
         std::cerr << "select: " << socket_get_error() << std::endl;
         res = client_state(res | CLIENT_ERROR);
     } else if (retval) {
-        //std::cout<<"YYYY"<<__LINE__<<std::endl;
         if (FD_ISSET(c.lidar_fd, &rfds)) res = client_state(res | LIDAR_DATA);
         if (FD_ISSET(c.imu_fd, &rfds)) res = client_state(res | IMU_DATA);
     }

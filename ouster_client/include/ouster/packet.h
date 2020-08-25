@@ -11,7 +11,7 @@
 #include <functional>
 #include <iterator>
 
-#include "ouster/impl/packet_impl.h"
+#include "ouster/packet_impl.h"
 #include "ouster/types.h"
 
 namespace ouster {
