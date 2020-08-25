@@ -1,1 +1,0 @@
-LidarInfo[] lidar_array

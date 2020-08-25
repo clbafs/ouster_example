@@ -97,7 +97,6 @@ void write_metadata(const std::string& meta_file, const std::string& metadata) {
     }
 }
 
-
 int connection_loop(ros::NodeHandle& nh, sensor::client& cli,
                     const sensor::data_format& df) {
     auto lidar_packet_pub = nh.advertise<PacketMsg>("lidar_packets", 1280);
@@ -108,6 +107,7 @@ int connection_loop(ros::NodeHandle& nh, sensor::client& cli,
     PacketMsg lidar_packet, imu_packet;
     lidar_packet.buf.resize(pf.lidar_packet_size + 1);
     imu_packet.buf.resize(pf.imu_packet_size + 1);
+
     while (ros::ok()) {
         auto state = sensor::poll_client(cli);
         if (state == sensor::EXIT) {

@@ -32,8 +32,6 @@ add_compile_options(-Wall -Wextra -Werror)
 
 # ==== Catkin ====
 add_message_files(FILES PacketMsg.msg)
-add_message_files(FILES LidarInfo.msg)
-add_message_files(FILES LidarInfoArray.msg)
 add_service_files(FILES OSConfigSrv.srv)
 generate_messages(DEPENDENCIES std_msgs sensor_msgs geometry_msgs)
 
@@ -89,13 +87,6 @@ target_link_libraries(img_node ouster_ros ${catkin_LIBRARIES} ouster_viz
                       ouster_client ${VTK_LIBRARIES})
 target_include_directories(img_node PRIVATE include ${catkin_INCLUDE_DIRS})
 add_dependencies(img_node ${PROJECT_NAME}_gencpp)
-
-add_executable(cluster_node src/PointCloudHandle.cpp)
-target_link_libraries(cluster_node ouster_ros ${catkin_LIBRARIES} ouster_viz
-        ouster_client ${VTK_LIBRARIES})
-target_include_directories(cluster_node PRIVATE include
-        ${catkin_INCLUDE_DIRS})
-add_dependencies(cluster_node ${PROJECT_NAME}_gencpp)
 
 # ==== Install ====
 install(

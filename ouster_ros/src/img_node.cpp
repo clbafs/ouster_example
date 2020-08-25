@@ -74,6 +74,7 @@ int main(int argc, char** argv) {
 
     auto cloud_handler = [&](const sensor_msgs::PointCloud2::ConstPtr& m) {
         pcl::fromROSMsg(*m, cloud);
+
         sensor_msgs::Image range_image;
         sensor_msgs::Image noise_image;
         sensor_msgs::Image intensity_image;
@@ -110,10 +111,7 @@ int main(int argc, char** argv) {
                 const size_t vv = (v + W - px_offset[u]) % W;
                 const size_t index = vv * H + u;
                 const auto& pt = cloud[index];
-                /*std::cout<<"pt range:"<<pt.range<<std::endl;
-                std::cout<<"pt.x:"<<pt.x<<std::endl;
-                std::cout<<"pt.y:"<<pt.y<<std::endl;
-                std::cout<<"pt.z:"<<pt.z<<std::endl;*/
+
                 if (pt.range == 0) {
                     reinterpret_cast<pixel_type*>(
                         range_image.data.data())[u * W + v] = 0;
@@ -126,7 +124,6 @@ int main(int argc, char** argv) {
                 }
                 noise_image_eigen(u, v) = pt.noise;
                 intensity_image_eigen(u, v) = pt.intensity;
-                //std::cout<<"pt intensity:"<<pt.intensity<<std::endl;
             }
         }
 
