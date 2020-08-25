@@ -37,8 +37,8 @@ install(TARGETS ouster_client
         )
 install(
         FILES
-        include/ouster/impl/client_impl.h
-        include/ouster/impl/packet_impl.h
+        include/ouster/client_impl.h
+        include/ouster/packet_impl.h
         include/ouster/client.h
         include/ouster/compat.h
         include/ouster/lidar_scan.h
