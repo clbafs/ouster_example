@@ -58,7 +58,7 @@ constexpr packet_format packet__1_14_0__128 = impl::packet__1_14_0<128>();
  * which data is added for every point in the scan.
  */
 template <typename iterator_type, typename F, typename C>
-std::function<void(const uint8_t*, iterator_type it)> batch_to_iter(
+std::function<void(const uint8_t*, iterator_type it,iterator_type it_new,uint32_t&)> batch_to_iter(
     int w, const packet_format& pf,
     const typename std::iterator_traits<iterator_type>::value_type& empty,
     C&& c, F&& f) {
@@ -69,7 +69,7 @@ std::function<void(const uint8_t*, iterator_type it)> batch_to_iter(
     constexpr std::chrono::nanoseconds invalid_ts(-1LL);
     std::chrono::nanoseconds scan_ts(invalid_ts);
 
-    return [=](const uint8_t* packet_buf, iterator_type it) mutable {
+    return [=](const uint8_t* packet_buf, iterator_type it,iterator_type it_new,uint32_t& index) mutable {
         for (int icol = 0; icol < pf.columns_per_packet; icol++) {
             const uint8_t* col_buf = pf.nth_col(icol, packet_buf);
             const uint16_t m_id = pf.col_measurement_id(col_buf);
@@ -111,6 +111,12 @@ std::function<void(const uint8_t*, iterator_type it)> batch_to_iter(
                     c(ipx, m_id, ts, scan_ts, pf.px_range(px_buf),
                       pf.px_signal_photons(px_buf), pf.px_noise_photons(px_buf),
                       pf.px_reflectivity(px_buf));
+                if( pf.px_range(px_buf)>2000){
+                    it_new[index++]=
+                            c(ipx, m_id, ts, scan_ts, pf.px_range(px_buf),
+                              pf.px_signal_photons(px_buf), pf.px_noise_photons(px_buf),
+                              pf.px_reflectivity(px_buf));
+                }
             }
         }
     };
