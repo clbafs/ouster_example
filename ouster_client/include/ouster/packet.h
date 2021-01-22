@@ -59,7 +59,7 @@ constexpr packet_format packet__1_14_0__128 = impl::packet__1_14_0<128>();
  */
 template <typename iterator_type, typename F, typename C>
 std::function<void(const uint8_t*, iterator_type it,iterator_type it_new,uint32_t&)> batch_to_iter(
-    int w, float min_range, float max_range, const packet_format& pf,
+    int w, float* min_range, float* max_range, const packet_format& pf,
     const typename std::iterator_traits<iterator_type>::value_type& empty,
     C&& c, F&& f) {
     int h = pf.pixels_per_column;
@@ -85,7 +85,7 @@ std::function<void(const uint8_t*, iterator_type it,iterator_type it_new,uint32_
                 if (scan_ts != invalid_ts) {
                     // zero out remaining missing columns
                     std::fill(it + (h * next_m_id), it + (w * h), empty);
-                    f(scan_ts);
+                    f(scan_ts, *max_range);
                 }
 
                 // start new frame
@@ -111,7 +111,7 @@ std::function<void(const uint8_t*, iterator_type it,iterator_type it_new,uint32_
                     c(ipx, m_id, ts, scan_ts, pf.px_range(px_buf),
                       pf.px_signal_photons(px_buf), pf.px_noise_photons(px_buf),
                       pf.px_reflectivity(px_buf));
-                if( pf.px_range(px_buf)>min_range*1000 && pf.px_range(px_buf)<max_range*1000){
+                if( pf.px_range(px_buf)>*min_range*1000 && pf.px_range(px_buf)<*max_range*1000){
                     it_new[index++]=
                             c(ipx, m_id, ts, scan_ts, pf.px_range(px_buf),
                               pf.px_signal_photons(px_buf), pf.px_noise_photons(px_buf),
